@@ -162,31 +162,20 @@ int mm_init(void)
     if (extend_heap(CHUNKSIZE) == NULL) 
         return -1;
 
-    void *bug = mm_malloc(SIZE_MAX - 1);
+    /*
+        //If the following code prints error messages you might have a size_t overflow attack
+        void *bug = mm_malloc(SIZE_MAX - 1);
         if (bug != NULL) {
-            struct block *bug_blk = bug - offsetof(struct block, payload);
+            struct block *bug_blk = bug - offsetof(struct block, payload); //Change this as needed
             printf("Bug Size Request: %ld\n Your code might be vulnerable to an size_t overflow attack in mm_malloc.\n", blk_size(bug_blk));
         }
 
         void *bug2 = mm_realloc(mm_malloc(2), SIZE_MAX - 1);
         if (bug2 != NULL) {
-            struct block *bug_blk = bug2 - offsetof(struct block, payload);
+            struct block *bug_blk = bug2 - offsetof(struct block, payload); //Change this as needed
             printf("Bug Size Request: %ld\n Your code might be vulnerable to an size_t overflow attack in mm_realloc.\n", blk_size(bug_blk));
         }
-
-        void *bug3 = malloc(9223372036854775807 - 1);
-        if (bug3 != NULL) {
-            printf("Malloc is vulnerable to size_t overflow attack\n");
-        }
-
-        void *bug4 = realloc(malloc(2), 9223372036854775807 - 1);
-        
-
-        void *bug5 = calloc(1,  9223372036854775807 - 1);
-
-        if (bug3 != NULL || bug4 != NULL || bug5 != NULL) {
-            printf("Possible security vulnerability in malloc, realloc, or calloc.\n");
-        }
+    */
     return 0;
 }
 
@@ -304,7 +293,7 @@ void *mm_realloc(void *ptr, size_t size)
 
     /*WARNING: This code currently uses the overflow protection in mm_malloc.
         Manuallly optimizing your code without checking for an size_t overflow 
-        would leave your code vulnerable to a buffer-overflow attack.
+        would leave your code vulnerable to an size_t-overflow attack.
 
         To test this run something like this:
         void *bug2 = mm_realloc(mm_malloc(2), SIZE_MAX - 1);
@@ -313,7 +302,7 @@ void *mm_realloc(void *ptr, size_t size)
             printf("Bug Size Request: %ld\n Your code might be vulnerable to an size_t overflow attack in mm_realloc.\n", blk_size(bug_blk));
         }
 
-     */
+    */
     void *newptr = mm_malloc(size);
 
     /* If realloc() fails the original block is left untouched  */
