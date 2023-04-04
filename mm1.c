@@ -50,6 +50,10 @@ const struct boundary_tag FENCE = {
  * be aligned at 0 mod 16.
  */
 struct block {
+    //struct list *free_list;
+    struct block *prev; //pointer that will point to the previous freed block
+    struct block *next; // pointer that will point to next freed block
+    
     struct boundary_tag header; /* offset 0, at address 12 mod 16 */
     char payload[0];            /* offset 4, at address 0 mod 16 */
 };
@@ -74,12 +78,15 @@ static bool is_aligned(size_t size) {
 
 /* Global variables */
 static struct block *heap_listp = 0;  /* Pointer to first block */  
-
+static struct block *list_head; // Pointer to the head of the list
 /* Function prototypes for internal helper routines */
 static struct block *extend_heap(size_t words);
 static void place(struct block *bp, size_t asize);
 static struct block *find_fit(size_t asize);
 static struct block *coalesce(struct block *bp);
+// Helper Functions
+static void insert_to_list(struct block *ptr);
+static void remove_from_list(struct block *ptr);
 
 /* Given a block, obtain previous's block footer.
    Works for left-most block also. */
@@ -140,6 +147,7 @@ static void mark_block_free(struct block *blk, int size) {
  */
 int mm_init(void) 
 {
+    list_head = NULL;
     assert (offsetof(struct block, payload) == 4);
     assert (sizeof(struct boundary_tag) == 4);
 
@@ -226,26 +234,32 @@ static struct block *coalesce(struct block *bp)
 
     if (prev_alloc && next_alloc) {            /* Case 1 */
         // both are allocated, nothing to coalesce
+        insert_to_list(bp);
         return bp;
     }
-
+    
     else if (prev_alloc && !next_alloc) {      /* Case 2 */
         // combine this block and next block by extending it
+        remove_from_list(next_blk(bp));
         mark_block_free(bp, size + blk_size(next_blk(bp)));
     }
 
     else if (!prev_alloc && next_alloc) {      /* Case 3 */
         // combine previous and this block by extending previous
         bp = prev_blk(bp);
+        remove_from_list(bp);
         mark_block_free(bp, size + blk_size(bp));
     }
 
     else {                                     /* Case 4 */
         // combine all previous, this, and next block into one
-        mark_block_free(prev_blk(bp), 
-                        size + blk_size(next_blk(bp)) + blk_size(prev_blk(bp)));
+        remove_from_list(next_blk(bp));
         bp = prev_blk(bp);
+        remove_from_list(bp);
+        mark_block_free(bp, size + blk_size(next_blk(bp)) + blk_size(prev_blk(bp)));
+        
     }
+    insert_to_list(bp);
     return bp;
 }
 
@@ -304,7 +318,7 @@ static struct block *extend_heap(size_t words)
 
     if (bp == NULL)
         return NULL;
-
+ 
     /* Initialize free block header/footer and the epilogue header.
      * Note that we overwrite the previous epilogue here. */
     struct block * blk = bp - sizeof(FENCE);
@@ -322,11 +336,12 @@ static struct block *extend_heap(size_t words)
 static void place(struct block *bp, size_t asize)
 {
     size_t csize = blk_size(bp);
-
+    remove_from_list(bp);
     if ((csize - asize) >= MIN_BLOCK_SIZE_WORDS) { 
         mark_block_used(bp, asize);
         bp = next_blk(bp);
         mark_block_free(bp, csize-asize);
+        insert_to_list(bp);
     }
     else { 
         mark_block_used(bp, csize);
@@ -339,22 +354,74 @@ static void place(struct block *bp, size_t asize)
 static struct block *find_fit(size_t asize)
 {
     /* First fit search */
-    for (struct block * bp = heap_listp; blk_size(bp) > 0; bp = next_blk(bp)) {
-        if (blk_free(bp) && asize <= blk_size(bp)) {
+    // for (struct block * bp = heap_listp; blk_size(bp) > 0; bp = next_blk(bp)) {
+    //     if (blk_free(bp) && asize <= blk_size(bp)) {
+    //         return bp;
+    //     }
+    // }
+    // return NULL; /* No fit */
+    // Traverse free list to find free block??
+    for (struct block * bp = list_head; bp != NULL; bp = bp->next) {
+        if (blk_size(bp) >= asize) {
             return bp;
         }
     }
-    return NULL; /* No fit */
+
+    return NULL;
+}
+
+team_t team = {
+      /* Team */
+    "Allocation Assassins",
+  /* full name of first member */
+    "John Tomas",
+    /* login ID of first member */
+    "00000000",
+    /* full name of second member (if any) */
+    "Kabeer Baig",
+    /* login ID of second member */
+    "906390836"
+};
+
+// Helper function that will insert free list 
+static void insert_to_list(struct block *ptr) {
+ptr->next = list_head;
+ptr->prev = NULL;
+if (list_head != NULL) {
+    list_head->prev = ptr;
+
+}
+
+list_head = ptr;
+
+
+}
+
+// Helper function that will remove block from list 
+static void remove_from_list(struct block *ptr) {
+
+if (ptr == NULL) {
+    return;
+
+}
+
+if (ptr->prev != NULL) {
+    ptr->prev->next = ptr->next;
+
+}
+else {
+    list_head = ptr->next;
+}
+
+if (ptr->next != NULL) {
+
+    ptr->next->prev = ptr->prev;
+
+}
+
 }
 
 
-team_t team = {
-    /* Team name */
-    "Sample allocator using implicit lists",
-    /* First member's full name */
-    "Godmar Back",
-    "gback@cs.vt.edu",
-    /* Second member's full name (leave as empty strings if none) */
-    "",
-    "",
-};
+//explicit list first 
+//seg. list or improve realloc 
+// tweak malloc; based on traces 
