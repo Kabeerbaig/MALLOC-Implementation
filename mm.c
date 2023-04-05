@@ -18,6 +18,7 @@
  *
  * First adapted for CS3214 Summer 2020 by gback
  */
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -60,7 +61,7 @@ struct block {
 #define WSIZE       sizeof(struct boundary_tag)  /* Word and header/footer size (bytes) */
 #define MIN_BLOCK_SIZE_WORDS 8 /* Minimum block size in words */
 #define CHUNKSIZE  (1<<10)  /* Extend heap by this amount (words) */
-
+#define NUM_OF_LISTS 10
 static inline size_t max(size_t x, size_t y) {
     return x > y ? x : y;
 }
@@ -76,13 +77,14 @@ static bool is_aligned(size_t size) {
 
 /* Global variables */
 static struct block *heap_listp = 0;  /* Pointer to first block */  
-static  struct list free_list; // free list 
+//static  struct list free_list; // free list 
+static struct list free_lists[NUM_OF_LISTS]; // free lists
 /* Function prototypes for internal helper routines */
 static struct block *extend_heap(size_t words);
 static void place(struct block *bp, size_t asize);
 static struct block *find_fit(size_t asize);
 static struct block *coalesce(struct block *bp);
-//static void add_to_list(struct block *ptr);
+int get_list_index(size_t size);
 
 /* Given a block, obtain previous's block footer.
    Works for left-most block also. */
@@ -137,8 +139,8 @@ static void mark_block_used(struct block *blk, int size) {
 }
 
 /* Mark a block as free and set its size. */
-static void mark_block_free(struct block *blk, int size) {
-    list_push_front(&free_list,&blk->list_elem);
+static void mark_block_free(struct block *blk, int size, int index) {
+    list_push_front(&free_lists[index],&blk->list_elem);
     set_header_and_footer(blk, size, 0);
     
 }
@@ -150,8 +152,11 @@ int mm_init(void)
 {
     // Initialize the free list struct
 
-    list_init(&free_list);
+   // list_init(&free_list);
     
+    for (int i = 0; i < NUM_OF_LISTS; i++) {
+        list_init(&free_lists[i]);
+    }
 
     assert (offsetof(struct block, payload) == 4);
     assert (sizeof(struct boundary_tag) == 4);
@@ -223,8 +228,9 @@ void mm_free(void *bp)
 
     /* Find block from user pointer */
     struct block *blk = bp - offsetof(struct block, payload);
-
-    mark_block_free(blk, blk_size(blk));
+    size_t size = blk_size(blk);
+    int num = get_list_index(size);
+    mark_block_free(blk, blk_size(blk), num);
      coalesce(blk);
    
 }
@@ -252,8 +258,8 @@ static struct block *coalesce(struct block *bp)
         list_remove(&next_blk(bp)->list_elem);
         list_remove(&bp->list_elem);
       
-
-        mark_block_free(bp,size);
+        int index = get_list_index(size);
+        mark_block_free(bp,size, index);
        
      
     }
@@ -264,8 +270,8 @@ static struct block *coalesce(struct block *bp)
        size += blk_size(prev_blk(bp));
         list_remove(&prev_blk(bp)->list_elem);
         list_remove(&bp->list_elem);
-       
-        mark_block_free(prev_blk(bp), size);
+       int index1 = get_list_index(size);
+        mark_block_free(prev_blk(bp), size, index1);
         
        
     
@@ -282,8 +288,8 @@ static struct block *coalesce(struct block *bp)
   
         list_remove(&next_blk(bp)->list_elem);
         list_remove(&bp->list_elem);
-      
-      mark_block_free(prev_blk(bp), size);
+      int index2 = get_list_index(size);
+      mark_block_free(prev_blk(bp), size, index2);
       // mark_block_free(next_blk(bp), size + temp_size);
          bp = prev_blk(bp);
     }
@@ -351,7 +357,8 @@ static struct block *extend_heap(size_t words)
     /* Initialize free block header/footer and the epilogue header.
      * Note that we overwrite the previous epilogue here. */
     struct block * blk = bp - sizeof(FENCE);
-    mark_block_free(blk, words);
+    int index = get_list_index(words);
+    mark_block_free(blk, words, index);
     next_blk(blk)->header = FENCE;
 
     /* Coalesce if the previous block was free */
@@ -385,7 +392,8 @@ static void place(struct block *bp, size_t asize)
         mark_block_used(bp, asize);
         //list_remove(&bp->list_elem);
         struct block *next_block = next_blk(bp);
-        mark_block_free(next_block, csize - asize);
+        int index = get_list_index((csize-asize));
+        mark_block_free(next_block, csize - asize, index);
        
        // add_to_list(next_block);
     }
@@ -410,14 +418,16 @@ static struct block *find_fit(size_t asize)
     // return NULL; /* No fit */
     // iterate over free list to see if the block has enough size
     // returns pointer if it does else it returns NULL
-    for (struct list_elem *e = list_begin(&free_list); e != list_end(&free_list); e = list_next(e)) {
-        struct block *ptr = list_entry(e, struct block, list_elem);
+    int num = get_list_index(asize);
+    for (int i = num; i < NUM_OF_LISTS; i++) {
+        for (struct list_elem *e = list_begin(&free_lists[i]); e != list_end(&free_lists[i]); e = list_next(e)) {
+            struct block *ptr = list_entry(e, struct block, list_elem);
 
-        if (asize <= blk_size(ptr)) {
-            return ptr;
+            if (asize <= blk_size(ptr)) {
+                return ptr;
         }
     }
-
+    }
     return NULL;
 }
 
@@ -427,12 +437,45 @@ team_t team = {
   /* full name of first member */
     "John Tomas",
     /* login ID of first member */
-    "00000000",
+    "jtomas",
     /* full name of second member (if any) */
     "Kabeer Baig",
     /* login ID of second member */
-    "906390836"
+    "kabeerb"
 };
 
+// gets the index of the list 
+int get_list_index(size_t size) {
+   
+   if (size <= 16) {
+    return 0;
+   }
+   else if (size <= 32) {
+    return 1;
+   }
+   else if (size <= 64) {
+    return 2;
+   }
+   else if (size <= 128) {
+    return 3;
+   }
+   else if (size <= 256) {
+    return 4;
+   }
+   else if (size <= 512) {
+    return 5;
+   }
+   else if (size <= 1024) {
+    return 6;
+   }
+   else if (size <= 2048) {
+    return 7;
+   }
+   else if (size <= 1096) {
+    return 8;
+   }
+    else {
+        return 9;
+    }
 
-
+}
