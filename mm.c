@@ -353,10 +353,19 @@ void *mm_realloc(void *ptr, size_t size)
         // case 4
         if (!prev_alloc)
         {
-            size_t b_size = blk_size(blk) + blk_size(next_blk(blk)) + blk_size(prev_blk(blk));
+            struct block *oldblock = ptr - offsetof(struct block, payload);
+            struct block *prevBlk = prev_blk(oldblock);
+            struct block *nextBlk = next_blk(oldblock);
+            size_t b_size = blk_size(oldblock) + blk_size(prevBlk) + blk_size(nextBlk);
+
             if (b_size >= awords)
             {
-                // TODO: combine prev, next, and current block together, then move block info into prev
+                mark_block_used(prevBlk, b_size);
+                /* Copy the old data. */
+                size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
+                memmove(&prevBlk->payload, oldblock->payload, oldpayloadsize);
+
+                return &prevBlk->payload;
             }
         }
     }
@@ -368,11 +377,18 @@ void *mm_realloc(void *ptr, size_t size)
     */
     else if (!prev_alloc)
     {
-        size_t b_size = blk_size(blk) + blk_size(prev_blk(blk));
+        struct block *oldblock = ptr - offsetof(struct block, payload);
+        struct block *prevBlk = prev_blk(oldblock);
+        size_t b_size = blk_size(oldblock) + blk_size(prevBlk);
 
         if (b_size >= awords)
         {
-            // TODO: combine prev and current block, then move block info into prev
+            mark_block_used(prevBlk, b_size);
+            /* Copy the old data. */
+            size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
+            memmove(&prevBlk->payload, oldblock->payload, oldpayloadsize);
+
+            return &prevBlk->payload;
         }
     }
 
@@ -513,7 +529,7 @@ int get_list_index(size_t size)
 {
     switch (size)
     {
-    case 0 - 16:
+    case 0 ... 16:
         return 0;
     case 17 ... 32:
         return 1;
