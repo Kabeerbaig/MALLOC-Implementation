@@ -60,8 +60,8 @@ struct block
 /* Basic constants and macros */
 #define WSIZE sizeof(struct boundary_tag) /* Word and header/footer size (bytes) */
 #define MIN_BLOCK_SIZE_WORDS 16           /* Minimum block size in words */
-#define CHUNKSIZE (1 << 10)               /* Extend heap by this amount (words) */
-#define NUM_OF_LISTS 17
+#define CHUNKSIZE (1 << 8)               /* Extend heap by this amount (words) */
+#define NUM_OF_LISTS 12
 static inline size_t max(size_t x, size_t y)
 {
     return x > y ? x : y;
@@ -504,7 +504,7 @@ static struct block *find_fit(size_t asize)
             {
                 return ptr;
             }
-            if (count++ == 8)
+            if (count++ == 5)
             {
                 break;
             }
