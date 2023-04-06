@@ -61,7 +61,7 @@ struct block
 #define WSIZE sizeof(struct boundary_tag) /* Word and header/footer size (bytes) */
 #define MIN_BLOCK_SIZE_WORDS 16           /* Minimum block size in words */
 #define CHUNKSIZE (1 << 10)               /* Extend heap by this amount (words) */
-#define NUM_OF_LISTS 10
+#define NUM_OF_LISTS 17
 static inline size_t max(size_t x, size_t y)
 {
     return x > y ? x : y;
@@ -160,8 +160,6 @@ static void mark_block_free(struct block *blk, int size, int index)
 int mm_init(void)
 {
     // Initialize the free list struct
-
-    // list_init(&free_list);
 
     for (int i = 0; i < NUM_OF_LISTS; i++)
     {
@@ -342,7 +340,7 @@ void *mm_realloc(void *ptr, size_t size)
     */
     else if (!next_alloc)
     {
-        // combine the 2 blocks into one
+        // case 2&3
         size_t b_size = blk_size(blk) + blk_size(next_blk(blk));
         if (b_size >= awords)
         {
@@ -351,6 +349,16 @@ void *mm_realloc(void *ptr, size_t size)
             set_header_and_footer(blk, b_size, 1);
             return &blk->payload;
         }
+
+        // case 4
+        if (!prev_alloc)
+        {
+            size_t b_size = blk_size(blk) + blk_size(next_blk(blk)) + blk_size(prev_blk(blk));
+            if (b_size >= awords)
+            {
+                // TODO: combine prev, next, and current block together, then move block info into prev
+            }
+        }
     }
     /*
     Case 1
@@ -358,8 +366,14 @@ void *mm_realloc(void *ptr, size_t size)
     Requested size is greater than original size
         case 1: copy the data into the beginning of the previous block and continue into the second block
     */
-    else if (prev_alloc)
+    else if (!prev_alloc)
     {
+        size_t b_size = blk_size(blk) + blk_size(prev_blk(blk));
+
+        if (b_size >= awords)
+        {
+            // TODO: combine prev and current block, then move block info into prev
+        }
     }
 
     /* If size == 0 then this is just free, and we return NULL. */
@@ -426,9 +440,6 @@ static struct block *extend_heap(size_t words)
 
     /* Coalesce if the previous block was free */
 
-    // struct block *coalesce_block =
-
-    // eturn coalesce_block;
     return coalesce(blk);
 }
 
@@ -439,16 +450,6 @@ static struct block *extend_heap(size_t words)
 static void place(struct block *bp, size_t asize)
 {
     size_t csize = blk_size(bp);
-
-    // if ((csize - asize) >= MIN_BLOCK_SIZE_WORDS) {
-    //     mark_block_used(bp, asize);
-    //     bp = next_blk(bp);
-    //     mark_block_free(bp, csize-asize);
-    // }
-    // else {
-    //     mark_block_used(bp, csize);
-    // }
-    // remove_from_list(bp);
 
     if ((csize - asize) >= (MIN_BLOCK_SIZE_WORDS))
     {
@@ -475,24 +476,21 @@ static void place(struct block *bp, size_t asize)
 static struct block *find_fit(size_t asize)
 {
     /* First fit search */
-    // for (struct block * bp = heap_listp; blk_size(bp) > 0; bp = next_blk(bp)) {
-    //     if (blk_free(bp) && asize <= blk_size(bp)) {
-    //         return bp;
-    //     }
-    // }
-    // return NULL; /* No fit */
-    // iterate over free list to see if the block has enough size
-    // returns pointer if it does else it returns NULL
+
     int num = get_list_index(asize);
     for (int i = num; i < NUM_OF_LISTS; i++)
     {
+        int count = 0;
         for (struct list_elem *e = list_begin(&free_lists[i]); e != list_end(&free_lists[i]); e = list_next(e))
         {
             struct block *ptr = list_entry(e, struct block, list_elem);
-
             if (asize <= blk_size(ptr))
             {
                 return ptr;
+            }
+            if (count++ == 8)
+            {
+                break;
             }
         }
     }
@@ -511,49 +509,32 @@ team_t team = {
     /* login ID of second member */
     "kabeerb"};
 
-// gets the index of the list
 int get_list_index(size_t size)
 {
-
-    if (size <= 16)
+    switch (size)
     {
+    case 0 - 16:
         return 0;
-    }
-    else if (size <= 32)
-    {
+    case 17 ... 32:
         return 1;
-    }
-    else if (size <= 64)
-    {
+    case 33 ... 64:
         return 2;
-    }
-    else if (size <= 128)
-    {
+    case 65 ... 128:
         return 3;
-    }
-    else if (size <= 256)
-    {
+    case 129 ... 256:
         return 4;
-    }
-    else if (size <= 512)
-    {
+    case 257 ... 512:
         return 5;
-    }
-    else if (size <= 1024)
-    {
-        return 6;
-    }
-    else if (size <= 2048)
-    {
+    case 513 ... 1024:
         return 7;
-    }
-    else if (size <= 1096)
-    {
+    case 1025 ... 2048:
         return 8;
-    }
-    else
-    {
+    case 2049 ... 4096:
         return 9;
+    case 4097 ... 8192:
+        return 10;
+    default:
+        return 11;
     }
 }
 // 32 and 128
