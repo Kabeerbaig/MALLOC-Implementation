@@ -316,9 +316,8 @@ void *mm_realloc(void *ptr, size_t size)
     size_t bsize = align(size + 2 * sizeof(struct boundary_tag)); /* account for tags */
     size_t awords = max(MIN_BLOCK_SIZE_WORDS, bsize / WSIZE);     /* respect minimum size */
 
-    struct block *oldblock = ptr - offsetof(struct block, payload);
-    struct block *prevBlk = prev_blk(oldblock);
-    struct block *nextBlk = next_blk(oldblock);
+    struct block *prev = prev_blk(blk);
+    struct block *next = next_blk(blk);
 
     /* If size == 0 then this is just free, and we return NULL. */
     if (size == 0)
@@ -352,10 +351,10 @@ void *mm_realloc(void *ptr, size_t size)
     else if (!next_alloc)
     {
         // case 2&3
-        size_t comb_size = blk_size(blk) + blk_size(next_blk(blk));
+        size_t comb_size = blk_size(blk) + blk_size(next);
         if (comb_size >= awords)
         {
-            list_remove(&next_blk(blk)->list_elem);
+            list_remove(&next->list_elem);
 
             set_header_and_footer(blk, comb_size, 1);
             return &blk->payload;
@@ -364,16 +363,16 @@ void *mm_realloc(void *ptr, size_t size)
         // case 4
         if (!prev_alloc)
         {
-            size_t comb_size = blk_size(oldblock) + blk_size(prevBlk) + blk_size(nextBlk);
+            size_t comb_size = blk_size(blk) + blk_size(prev) + blk_size(next);
 
             if (comb_size >= awords)
             {
-                mark_block_used(prevBlk, comb_size);
+                mark_block_used(prev, comb_size);
                 /* Copy the old data. */
-                size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
-                memmove(&prevBlk->payload, oldblock->payload, oldpayloadsize);
+                size_t oldpayloadsize = blk_size(blk) * WSIZE - 2 * sizeof(struct boundary_tag);
+                memmove(&prev->payload, blk->payload, oldpayloadsize);
 
-                return &prevBlk->payload;
+                return &prev->payload;
             }
         }
     }
@@ -385,16 +384,16 @@ void *mm_realloc(void *ptr, size_t size)
     */
     else if (!prev_alloc)
     {
-        size_t comb_size = blk_size(oldblock) + blk_size(prevBlk);
+        size_t comb_size = blk_size(blk) + blk_size(prev);
 
         if (comb_size >= awords)
         {
-            mark_block_used(prevBlk, comb_size);
+            mark_block_used(prev, comb_size);
             /* Copy the old data. */
-            size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
-            memmove(&prevBlk->payload, oldblock->payload, oldpayloadsize);
+            size_t oldpayloadsize = blk_size(blk) * WSIZE - 2 * sizeof(struct boundary_tag);
+            memmove(&prev->payload, blk->payload, oldpayloadsize);
 
-            return &prevBlk->payload;
+            return &prev->payload;
         }
     }
 
@@ -406,7 +405,7 @@ void *mm_realloc(void *ptr, size_t size)
     }
 
     /* Copy the old data. */
-    size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
+    size_t oldpayloadsize = blk_size(blk) * WSIZE - 2 * sizeof(struct boundary_tag);
     if (size < oldpayloadsize)
         oldpayloadsize = size;
     memcpy(newptr, ptr, oldpayloadsize);
