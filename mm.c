@@ -59,8 +59,8 @@ struct block
 
 /* Basic constants and macros */
 #define WSIZE sizeof(struct boundary_tag) /* Word and header/footer size (bytes) */
-#define MIN_BLOCK_SIZE_WORDS 16           /* Minimum block size in words */
-#define CHUNKSIZE (1 << 8)               /* Extend heap by this amount (words) */
+#define MIN_BLOCK_SIZE_WORDS 8            /* Minimum block size in words */
+#define CHUNKSIZE (1 << 8)                /* Extend heap by this amount (words) */
 #define NUM_OF_LISTS 12
 static inline size_t max(size_t x, size_t y)
 {
@@ -79,9 +79,8 @@ static bool is_aligned(size_t size)
 }
 
 /* Global variables */
-static struct block *heap_listp = 0; /* Pointer to first block */
-// static  struct list free_list; // free list
-static struct list free_lists[NUM_OF_LISTS]; // free lists
+static struct list free_lists[NUM_OF_LISTS]; /* Free lists */
+
 /* Function prototypes for internal helper routines */
 static struct block *extend_heap(size_t words);
 static void place(struct block *bp, size_t asize);
@@ -182,12 +181,8 @@ int mm_init(void)
      * left-most block.
      */
     initial[2] = FENCE; /* Prologue footer */
-    heap_listp = (struct block *)&initial[3];
     initial[3] = FENCE; /* Epilogue header */
 
-    /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNKSIZE) == NULL)
-        return -1;
     return 0;
 }
 
@@ -231,7 +226,6 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *bp)
 {
-    assert(heap_listp != 0); // assert that mm_init was called
     if (bp == 0)
         return;
 
@@ -322,6 +316,23 @@ void *mm_realloc(void *ptr, size_t size)
     size_t bsize = align(size + 2 * sizeof(struct boundary_tag)); /* account for tags */
     size_t awords = max(MIN_BLOCK_SIZE_WORDS, bsize / WSIZE);     /* respect minimum size */
 
+    struct block *oldblock = ptr - offsetof(struct block, payload);
+    struct block *prevBlk = prev_blk(oldblock);
+    struct block *nextBlk = next_blk(oldblock);
+
+    /* If size == 0 then this is just free, and we return NULL. */
+    if (size == 0)
+    {
+        mm_free(ptr);
+        return 0;
+    }
+
+    /* If oldptr is NULL, then this is just malloc. */
+    if (ptr == NULL)
+    {
+        return mm_malloc(size);
+    }
+
     /*
     CASE 0
      Original size is greater than requested size
@@ -341,26 +352,23 @@ void *mm_realloc(void *ptr, size_t size)
     else if (!next_alloc)
     {
         // case 2&3
-        size_t b_size = blk_size(blk) + blk_size(next_blk(blk));
-        if (b_size >= awords)
+        size_t comb_size = blk_size(blk) + blk_size(next_blk(blk));
+        if (comb_size >= awords)
         {
             list_remove(&next_blk(blk)->list_elem);
 
-            set_header_and_footer(blk, b_size, 1);
+            set_header_and_footer(blk, comb_size, 1);
             return &blk->payload;
         }
 
         // case 4
         if (!prev_alloc)
         {
-            struct block *oldblock = ptr - offsetof(struct block, payload);
-            struct block *prevBlk = prev_blk(oldblock);
-            struct block *nextBlk = next_blk(oldblock);
-            size_t b_size = blk_size(oldblock) + blk_size(prevBlk) + blk_size(nextBlk);
+            size_t comb_size = blk_size(oldblock) + blk_size(prevBlk) + blk_size(nextBlk);
 
-            if (b_size >= awords)
+            if (comb_size >= awords)
             {
-                mark_block_used(prevBlk, b_size);
+                mark_block_used(prevBlk, comb_size);
                 /* Copy the old data. */
                 size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
                 memmove(&prevBlk->payload, oldblock->payload, oldpayloadsize);
@@ -377,13 +385,11 @@ void *mm_realloc(void *ptr, size_t size)
     */
     else if (!prev_alloc)
     {
-        struct block *oldblock = ptr - offsetof(struct block, payload);
-        struct block *prevBlk = prev_blk(oldblock);
-        size_t b_size = blk_size(oldblock) + blk_size(prevBlk);
+        size_t comb_size = blk_size(oldblock) + blk_size(prevBlk);
 
-        if (b_size >= awords)
+        if (comb_size >= awords)
         {
-            mark_block_used(prevBlk, b_size);
+            mark_block_used(prevBlk, comb_size);
             /* Copy the old data. */
             size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
             memmove(&prevBlk->payload, oldblock->payload, oldpayloadsize);
@@ -392,21 +398,7 @@ void *mm_realloc(void *ptr, size_t size)
         }
     }
 
-    /* If size == 0 then this is just free, and we return NULL. */
-    if (size == 0)
-    {
-        mm_free(ptr);
-        return 0;
-    }
-
-    /* If oldptr is NULL, then this is just malloc. */
-    if (ptr == NULL)
-    {
-        return mm_malloc(size);
-    }
-
     void *newptr = mm_malloc(size);
-
     /* If realloc() fails the original block is left untouched  */
     if (!newptr)
     {
@@ -414,7 +406,6 @@ void *mm_realloc(void *ptr, size_t size)
     }
 
     /* Copy the old data. */
-    struct block *oldblock = ptr - offsetof(struct block, payload);
     size_t oldpayloadsize = blk_size(oldblock) * WSIZE - 2 * sizeof(struct boundary_tag);
     if (size < oldpayloadsize)
         oldpayloadsize = size;
@@ -519,11 +510,11 @@ team_t team = {
     /* full name of first member */
     "John Tomas",
     /* login ID of first member */
-    "jtomas",
+    "jtomas@vt.edu",
     /* full name of second member (if any) */
     "Kabeer Baig",
     /* login ID of second member */
-    "kabeerb"};
+    "kabeerb@vt.edu"};
 
 int get_list_index(size_t size)
 {
