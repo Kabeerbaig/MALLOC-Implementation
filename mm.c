@@ -256,7 +256,8 @@ static struct block *coalesce(struct block *bp)
     { /* Case 2 */
         // combine this block and next block by extending it
         // Add size of next block to the current block
-
+        // assert 5
+        assert(bp != NULL);
         size += blk_size(next_blk(bp));
         // mark the block free
         list_remove(&next_blk(bp)->list_elem);
@@ -315,7 +316,7 @@ void *mm_realloc(void *ptr, size_t size)
 
     size_t bsize = align(size + 2 * sizeof(struct boundary_tag)); /* account for tags */
     size_t awords = max(MIN_BLOCK_SIZE_WORDS, bsize / WSIZE);     /* respect minimum size */
-
+    void *end_heap = (void *)((char *)&blk->payload + awords -1);
     struct block *prev = prev_blk(blk);
     struct block *next = next_blk(blk);
 
@@ -338,7 +339,24 @@ void *mm_realloc(void *ptr, size_t size)
     */
     if (blk_size(blk) >= awords)
     {
+    // assert 3 
+    assert(MIN_BLOCK_SIZE_WORDS <= blk_size(blk));
         return ptr;
+    }
+    // potential check for case 5?? 
+    else if (end_heap >= mem_heap_hi()) {
+
+    //assert 2 
+    assert(end_heap < mem_heap_hi());
+
+    if (!prev_alloc && (blk_size(blk) + blk_size(prev)) < awords) {
+
+        extend_heap((awords - (blk_size(blk) + blk_size(prev))) + 1);
+        size_t total = blk_size(blk) + blk_size(next_blk(blk));
+        mark_block_used(blk, total);
+        return &blk->payload;
+    }
+
     }
     /*
     Case 2,3,4
@@ -456,7 +474,10 @@ static struct block *extend_heap(size_t words)
 static void place(struct block *bp, size_t asize)
 {
     size_t csize = blk_size(bp);
-
+    //assert 1
+    assert(csize >= asize);
+    
+    
     if ((csize - asize) >= (MIN_BLOCK_SIZE_WORDS))
     {
 
@@ -490,11 +511,13 @@ static struct block *find_fit(size_t asize)
         for (struct list_elem *e = list_begin(&free_lists[i]); e != list_end(&free_lists[i]); e = list_next(e))
         {
             struct block *ptr = list_entry(e, struct block, list_elem);
+            // assert 4
+            assert(MIN_BLOCK_SIZE_WORDS <= blk_size(ptr));
             if (asize <= blk_size(ptr))
             {
                 return ptr;
             }
-            if (count++ == 5)
+            if (count++ == 10)
             {
                 break;
             }
