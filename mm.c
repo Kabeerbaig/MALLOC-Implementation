@@ -345,6 +345,8 @@ void *mm_realloc(void *ptr, size_t size)
     */
     else if (blk_size(next_blk(blk)) == 0)
     {
+        // make sure that the next block is fence
+        assert(next_blk(blk)->header.inuse != 0);
         size_t space_needed = max(awords - (blk_size(blk)), MIN_BLOCK_SIZE_WORDS);
         list_remove(&extend_heap(space_needed)->list_elem);
         size_t total = blk_size(blk) + space_needed;
