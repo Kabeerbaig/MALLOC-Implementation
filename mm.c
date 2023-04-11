@@ -226,8 +226,7 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *bp)
 {
-    if (bp == 0)
-        return;
+    assert(bp != NULL);
 
     /* Find block from user pointer */
     struct block *blk = bp - offsetof(struct block, payload);
@@ -317,9 +316,6 @@ void *mm_realloc(void *ptr, size_t size)
     size_t bsize = align(size + 2 * sizeof(struct boundary_tag)); /* account for tags */
     size_t awords = max(MIN_BLOCK_SIZE_WORDS, bsize / WSIZE);     /* respect minimum size */
 
-    struct block *prev = prev_blk(blk);
-    struct block *next = next_blk(blk);
-
     /* If size == 0 then this is just free, and we return NULL. */
     if (size == 0)
     {
@@ -347,7 +343,7 @@ void *mm_realloc(void *ptr, size_t size)
     CASE 5
     Realloc at the end of the heap
     */
-    else if (blk_size(next) == 0)
+    else if (blk_size(next_blk(blk)) == 0)
     {
         size_t space_needed = max(awords - (blk_size(blk)), MIN_BLOCK_SIZE_WORDS);
         list_remove(&extend_heap(space_needed)->list_elem);
@@ -367,6 +363,8 @@ void *mm_realloc(void *ptr, size_t size)
     else if (!next_alloc)
     {
         // case 2&3
+        struct block *next = next_blk(blk);
+
         size_t comb_size = blk_size(blk) + blk_size(next);
         if (comb_size >= awords)
         {
@@ -379,6 +377,7 @@ void *mm_realloc(void *ptr, size_t size)
         // case 4
         if (!prev_alloc)
         {
+            struct block *prev = prev_blk(blk);
             size_t comb_size = blk_size(blk) + blk_size(prev) + blk_size(next);
 
             if (comb_size >= awords)
@@ -400,6 +399,7 @@ void *mm_realloc(void *ptr, size_t size)
     */
     else if (!prev_alloc)
     {
+        struct block *prev = prev_blk(blk);
         size_t comb_size = blk_size(blk) + blk_size(prev);
 
         if (comb_size >= awords)
@@ -413,12 +413,9 @@ void *mm_realloc(void *ptr, size_t size)
         }
     }
 
-    void *newptr = mm_malloc(size);
-    /* If realloc() fails the original block is left untouched  */
-    if (!newptr)
-    {
-        return 0;
-    }
+    struct block *newptr = mm_malloc(size);
+    // assert 2
+    assert(newptr != NULL);
 
     /* Copy the old data. */
     size_t oldpayloadsize = blk_size(blk) * WSIZE - 2 * sizeof(struct boundary_tag);
@@ -479,17 +476,13 @@ static void place(struct block *bp, size_t asize)
     {
 
         mark_block_used(bp, asize);
-        // list_remove(&bp->list_elem);
         struct block *next_block = next_blk(bp);
         int index = get_list_index((csize - asize));
         mark_block_free(next_block, csize - asize, index);
-
-        // add_to_list(next_block);
     }
     else
     {
         mark_block_used(bp, csize);
-        // list_remove(&bp->list_elem);
     }
 }
 
@@ -563,8 +556,3 @@ int get_list_index(size_t size)
         return 11;
     }
 }
-// 32 and 128
-// IF thery are slightly more or less add them in different lists
-// TODO: how to increase throughput in seg list
-// TODO: do we have to set new bondary tags?
-// coalecsing, binary, realloc have low util
