@@ -316,7 +316,7 @@ void *mm_realloc(void *ptr, size_t size)
 
     size_t bsize = align(size + 2 * sizeof(struct boundary_tag)); /* account for tags */
     size_t awords = max(MIN_BLOCK_SIZE_WORDS, bsize / WSIZE);     /* respect minimum size */
-    void *end_heap = (void *)((char *)&blk->payload + awords -1);
+
     struct block *prev = prev_blk(blk);
     struct block *next = next_blk(blk);
 
@@ -339,24 +339,22 @@ void *mm_realloc(void *ptr, size_t size)
     */
     if (blk_size(blk) >= awords)
     {
-    // assert 3 
-    assert(MIN_BLOCK_SIZE_WORDS <= blk_size(blk));
+        // assert 3
+        assert(MIN_BLOCK_SIZE_WORDS <= blk_size(blk));
         return ptr;
     }
-    // potential check for case 5?? 
-    else if (end_heap >= mem_heap_hi()) {
+    /*
+    CASE 5
+    Realloc at the end of the heap
+    */
+    else if (blk_size(next) == 0)
+    {
+        size_t space_needed = max(awords - (blk_size(blk)), MIN_BLOCK_SIZE_WORDS);
+        list_remove(&extend_heap(space_needed)->list_elem);
+        size_t total = blk_size(blk) + space_needed;
+        set_header_and_footer(blk, total, 1);
 
-    //assert 2 
-    assert(end_heap < mem_heap_hi());
-
-    if (!prev_alloc && (blk_size(blk) + blk_size(prev)) < awords) {
-
-        extend_heap((awords - (blk_size(blk) + blk_size(prev))) + 1);
-        size_t total = blk_size(blk) + blk_size(next_blk(blk));
-        mark_block_used(blk, total);
         return &blk->payload;
-    }
-
     }
     /*
     Case 2,3,4
@@ -474,10 +472,9 @@ static struct block *extend_heap(size_t words)
 static void place(struct block *bp, size_t asize)
 {
     size_t csize = blk_size(bp);
-    //assert 1
+    // assert 1
     assert(csize >= asize);
-    
-    
+
     if ((csize - asize) >= (MIN_BLOCK_SIZE_WORDS))
     {
 
