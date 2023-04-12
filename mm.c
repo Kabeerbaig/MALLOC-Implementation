@@ -142,6 +142,7 @@ static void set_header_and_footer(struct block *blk, int size, int inuse)
 }
 
 /* Mark a block as used and set its size. */
+// removes block from list 
 static void mark_block_used(struct block *blk, int size)
 {
     set_header_and_footer(blk, size, 1);
@@ -149,6 +150,7 @@ static void mark_block_used(struct block *blk, int size)
 }
 
 /* Mark a block as free and set its size. */
+// adds the block to the proper free list based on size
 static void mark_block_free(struct block *blk, int size, int index)
 {
     list_push_front(&free_lists[index], &blk->list_elem);
@@ -296,7 +298,7 @@ static struct block *coalesce(struct block *bp)
         list_remove(&bp->list_elem);
         int index2 = get_list_index(size);
         mark_block_free(prev_blk(bp), size, index2);
-        // mark_block_free(next_blk(bp), size + temp_size);
+       
         bp = prev_blk(bp);
     }
     // add the resulting blocks to free list
@@ -305,13 +307,9 @@ static struct block *coalesce(struct block *bp)
 }
 
 /*
- * mm_realloc - Naive implementation of realloc
+ * mm_realloc - Updated implementation of realloc
  */
-// review presentation for 6 realloc cases to look at
-// 6 if cases
-// case 5 will have to use extend heap
-// case 2 and 3 can be the same check; make sure block is minimum block size
-// Case 4 make sure black is minimum block size
+
 void *mm_realloc(void *ptr, size_t size)
 {
     struct block *blk = ptr - offsetof(struct block, payload);
@@ -390,6 +388,8 @@ void *mm_realloc(void *ptr, size_t size)
             if (comb_size >= awords)
             {
                 mark_block_used(prev, comb_size);
+                // assert 8
+                assert(blk_size(prev) == comb_size);
                 /* Copy the old data. */
                 size_t oldpayloadsize = blk_size(blk) * WSIZE - 2 * sizeof(struct boundary_tag);
                 memmove(&prev->payload, blk->payload, oldpayloadsize);
@@ -439,9 +439,9 @@ void *mm_realloc(void *ptr, size_t size)
 /*
  * checkheap - We don't check anything right now.
  */
-void mm_checkheap(int verbose)
-{
-}
+// void mm_checkheap(int verbose)
+// {
+// }
 
 /*
  * The remaining routines are internal helper routines
@@ -483,13 +483,18 @@ static void place(struct block *bp, size_t asize)
     {
 
         mark_block_used(bp, asize);
+        //assert 6 
+        assert(blk_size(bp) == asize);
         struct block *next_block = next_blk(bp);
         int index = get_list_index((csize - asize));
         mark_block_free(next_block, csize - asize, index);
     }
     else
     {
+       
         mark_block_used(bp, csize);
+         //assert 7
+        assert(blk_size(bp) == csize);
     }
 }
 
@@ -535,6 +540,7 @@ team_t team = {
     /* login ID of second member */
     "kabeerb@vt.edu"};
 
+//Gets the index of the list based on the size 
 int get_list_index(size_t size)
 {
     switch (size)
