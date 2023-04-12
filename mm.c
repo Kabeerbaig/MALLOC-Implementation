@@ -1,22 +1,24 @@
 /*
- * Simple, 64-bit allocator based on implicit free lists,
- * first fit placement, and boundary tag coalescing, as described
- * in the CS:APP2e text. Blocks must be aligned to 16 byte
+ * Blocks must be aligned to 16 byte
  * boundaries. Minimum block size is 16 bytes.
+ *
+ * This implementation uses one list that holds 12 segregated lists
+ * The segregated list sizes are based off of power of 2s so that each
+ * list holds different sizes of allocated blocks. (0-16, 17-32, 33-64, ...)
+ * Realloc was implemented to handle all 5 cases of optimization, depending
+ * on if the block before or after is free or not
+ * To find which segregated list a block goes into, we limit searching a list to
+ * 10 times before we go on to the next list, to improve efficiency
+ * We also have a coalesce function that is used to prevent fragmentation, as it
+ * allows blocks to be combined after being freed.
  *
  * This version is loosely based on
  * http://csapp.cs.cmu.edu/3e/ics3/code/vm/malloc/mm.c
  * but unlike the book's version, it does not use C preprocessor
  * macros or explicit bit operations.
  *
- * It follows the book in counting in units of 4-byte words,
- * but note that this is a choice (my actual solution chooses
- * to count everything in bytes instead.)
+ * It follows the book in counting in units of 4-byte words
  *
- * You should use this code as a starting point for your
- * implementation.
- *
- * First adapted for CS3214 Summer 2020 by gback
  */
 #include <stdio.h>
 #include <string.h>
@@ -227,6 +229,9 @@ void *mm_malloc(size_t size)
 void mm_free(void *bp)
 {
     assert(bp != NULL);
+
+    if (bp == 0)
+        return;
 
     /* Find block from user pointer */
     struct block *blk = bp - offsetof(struct block, payload);
